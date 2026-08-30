@@ -1,0 +1,143 @@
+﻿# -*- coding: utf-8 -*-
+r"""
+第 3 步:巡检引擎
+- 14 条规则(6 大类),每条规则用一条 SQL 查出问题明细
+- 命令行运行: .venv\Scripts\python.exe inspector.py
+- run_inspection() 返回结构化结果,后续 Flask 页面直接复用
+"""
+import pymysql
+import pandas as pd
+from datetime import datetime
+
+from config import DB_CONFIG
+
+# ---------- 规则定义 ----------
+# category: 规则大类 / name: 规则名 / columns: 明细展示的列名 / sql: 检测 SQL
+RULES = [
+    # ---- 药品字典 drug ----
+    {"category": "药品字典", "name": "药品编码重复", "columns": ["ID", "编码", "名称", "规格", "价格"],
+     "sql": """
+        SELECT d.id, d.drug_code, d.name, d.spec, d.price
+        FROM drug d
+        JOIN (SELECT drug_code FROM drug GROUP BY drug_code HAVING COUNT(*) > 1) dup
+          ON d.drug_code = dup.drug_code
+     """},
+    {"category": "药品字典", "name": "药品名称为空", "columns": ["ID", "编码", "名称", "规格", "价格"],
+     "sql": "SELECT id, drug_code, name, spec, price FROM drug WHERE name = ''"},
+    {"category": "药品字典", "name": "药品规格为空", "columns": ["ID", "编码", "名称", "规格", "价格"],
+     "sql": "SELECT id, drug_code, name, spec, price FROM drug WHERE spec IS NULL OR spec = ''"},
+    {"category": "药品字典", "name": "药品价格<=0", "columns": ["ID", "编码", "名称", "规格", "价格"],
+     "sql": "SELECT id, drug_code, name, spec, price FROM drug WHERE price <= 0"},
+
+    # ---- 科室 department ----
+    {"category": "科室", "name": "科室编码重复", "columns": ["ID", "编码", "名称", "上级ID"],
+     "sql": """
+        SELECT d.id, d.code, d.name, d.parent_id
+        FROM department d
+        JOIN (SELECT code FROM department GROUP BY code HAVING COUNT(*) > 1) dup
+          ON d.code = dup.code
+     """},
+    {"category": "科室", "name": "上级科室不存在", "columns": ["ID", "编码", "名称", "上级ID"],
+     "sql": """
+        SELECT d.id, d.code, d.name, d.parent_id
+        FROM department d
+        LEFT JOIN department p ON d.parent_id = p.id
+        WHERE d.parent_id IS NOT NULL AND p.id IS NULL
+     """},
+
+    # ---- 收费项目 charge_item ----
+    {"category": "收费项目", "name": "项目编码重复", "columns": ["ID", "编码", "名称", "价格"],
+     "sql": """
+        SELECT c.id, c.item_code, c.name, c.price
+        FROM charge_item c
+        JOIN (SELECT item_code FROM charge_item GROUP BY item_code HAVING COUNT(*) > 1) dup
+          ON c.item_code = dup.item_code
+     """},
+    {"category": "收费项目", "name": "项目价格<=0", "columns": ["ID", "编码", "名称", "价格"],
+     "sql": "SELECT id, item_code, name, price FROM charge_item WHERE price <= 0"},
+
+    # ---- 医嘱 medical_order ----
+    {"category": "医嘱", "name": "患者不存在", "columns": ["医嘱ID", "患者ID", "医生ID", "药品编码"],
+     "sql": """
+        SELECT o.id, o.patient_id, o.doctor_id, o.drug_code
+        FROM medical_order o
+        LEFT JOIN patient p ON o.patient_id = p.id
+        WHERE p.id IS NULL
+     """},
+    {"category": "医嘱", "name": "医生不存在", "columns": ["医嘱ID", "患者ID", "医生ID", "药品编码"],
+     "sql": """
+        SELECT o.id, o.patient_id, o.doctor_id, o.drug_code
+        FROM medical_order o
+        LEFT JOIN doctor d ON o.doctor_id = d.id
+        WHERE d.id IS NULL
+     """},
+    {"category": "医嘱", "name": "药品不存在", "columns": ["医嘱ID", "患者ID", "医生ID", "药品编码"],
+     "sql": """
+        SELECT o.id, o.patient_id, o.doctor_id, o.drug_code
+        FROM medical_order o
+        LEFT JOIN drug d ON o.drug_code = d.drug_code
+        WHERE d.drug_code IS NULL
+     """},
+
+    # ---- 患者 patient ----
+    {"category": "患者", "name": "身份证重复", "columns": ["ID", "身份证号", "姓名"],
+     "sql": """
+        SELECT p.id, p.id_card, p.name
+        FROM patient p
+        JOIN (SELECT id_card FROM patient GROUP BY id_card HAVING COUNT(*) > 1) dup
+          ON p.id_card = dup.id_card
+     """},
+    {"category": "患者", "name": "身份证格式不对", "columns": ["ID", "身份证号", "姓名"],
+     "sql": "SELECT id, id_card, name FROM patient WHERE id_card NOT REGEXP '^[0-9]{17}[0-9Xx]$'"},
+
+    # ---- 医生 doctor ----
+    {"category": "医生", "name": "所属科室不存在", "columns": ["ID", "工号", "姓名", "科室ID"],
+     "sql": """
+        SELECT d.id, d.code, d.name, d.dept_id
+        FROM doctor d
+        LEFT JOIN department dept ON d.dept_id = dept.id
+        WHERE d.dept_id IS NOT NULL AND dept.id IS NULL
+     """},
+]
+
+
+def run_inspection():
+    """执行全部规则,返回每条规则的命中明细。"""
+    conn = pymysql.connect(**DB_CONFIG)
+    results = []
+    with conn.cursor() as cur:
+        for rule in RULES:
+            cur.execute(rule["sql"])
+            rows = cur.fetchall()
+            results.append({**rule, "rows": rows})
+    conn.close()
+    return results
+
+
+def print_report(results):
+    """把巡检结果打印成命令行报告。"""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print("=" * 62)
+    print("HIS 数据巡检报告")
+    print(f"巡检时间: {now}")
+    print("=" * 62)
+
+    total, hit = 0, 0
+    for r in results:
+        n = len(r["rows"])
+        total += n
+        if n > 0:
+            hit += 1
+            print(f"\n[{r['category']}] {r['name']} —— {n} 条记录")
+            df = pd.DataFrame(r["rows"], columns=r["columns"])
+            print(df.to_string(index=False))
+        else:
+            print(f"\n[{r['category']}] {r['name']} —— 0 条,通过 ✓")
+
+    print("\n" + "=" * 62)
+    print(f"命中规则: {hit}/{len(RULES)} | 问题记录合计: {total} 条")
+    print("=" * 62)
+
+
+if __name__ == "__main__":
+    print_report(run_inspection())

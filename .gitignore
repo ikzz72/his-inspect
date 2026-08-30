@@ -5,3 +5,10 @@ __pycache__/
 *.log
 instance/
 
+
+runner.py
+
+last_bad.txt
+
+_resume_out/
+.venv/
