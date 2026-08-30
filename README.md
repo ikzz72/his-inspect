@@ -9,7 +9,7 @@
 - 生成文本报告（report.txt）与可视化 HTML 报告（report.html）
 - Flask 网页实时展示巡检结果
 - schedule 定时自动巡检
-- 发现脏数据自动发送邮件通知（SMTP）
+- 邮件告警基于「状态变化」触发：发现问题立即告警、恢复正常后通知、状态无变化不打扰（避免告警噪音）
 
 ## 技术栈
 
@@ -27,9 +27,10 @@
 | init_db.py | 建库建表，插入演示用的脏数据 |
 | config.py | 数据库连接配置 |
 | app.py | 14 条巡检规则 + Flask 网页版 |
-| runner.py | 定时巡检 + 邮件通知 |
+| runner.py | 定时巡检 + 状态变化邮件告警 |
 | inspector_v2.py | 命令行版巡检（生成 txt / html 报告） |
 | report.txt / report.html | 生成的巡检报告 |
+| last_bad.txt | 记录上次脏数据数量（用于判断状态是否变化） |
 
 ## 快速开始
 
@@ -48,7 +49,7 @@ python -m venv .venv
 .venv\Scripts\python.exe app.py
 # 浏览器打开 http://127.0.0.1:5000
 
-# 5. 定时巡检 + 邮件通知（需在 runner.py 配置自己的邮箱）
+# 5. 定时巡检 + 邮件告警（需在 runner.py 配置自己的邮箱）
 .venv\Scripts\python.exe runner.py
 ```
 
@@ -69,7 +70,8 @@ python -m venv .venv
 - 重复检测：GROUP BY ... HAVING COUNT(*) > 1
 - 孤儿检测：LEFT JOIN ... WHERE 右表主键 IS NULL
 - 格式校验：NOT REGEXP
-- 巡检引擎：循环执行规则 -> 汇总结果 -> 渲染 HTML -> （可选）邮件告警
+- 巡检引擎：循环执行规则 -> 汇总结果 -> 渲染 HTML
+- 告警策略：基于状态变化触发（delta）——记录上次脏数据数量，有异常告警、恢复正常通知、无变化不打扰
 
 ## 截图
 
