@@ -24,12 +24,11 @@ def job():
         f.write("HIS 巡检报告\n")
         for r in results:
             f.write(f"[{r['name']}]命中{len(r['rows'])}条\n")
-            for r in r["rows"]:
+            for row in r["rows"]:
                 f.write("  " + str(row) + "\n")
     with open ("report.html", "w", encoding="utf-8") as f:
         f.write(build_html(results))
         print("巡检完成，报告已更新")
-send_email("HIS巡检测试", "这是一封测试邮件，邮件功能正常！")
 schedule.every(1).minutes.do(job)
 print("定时巡检已启动：每 1 分钟跑一次，按 Ctrl+C 停止")
 while True:
