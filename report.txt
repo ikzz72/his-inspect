@@ -1,8 +1,8 @@
 HIS 巡检报告
 [药品名称为空]命中1条
-   (4, 'DR003', '')
-[药品价格小于0]命中2条
-   (6, 'DR005', '葡萄糖注射液', Decimal('0.00'))
-   (8, 'DR007', '胰岛素注射液', Decimal('-5.00'))
+  <built-in method now of type object at 0x00007FFF5BA7FDA0>
+[药品价格小于等于0]命中2条
+  <built-in method now of type object at 0x00007FFF5BA7FDA0>
+  <built-in method now of type object at 0x00007FFF5BA7FDA0>
 [药品编码重复]命中1条
-   ('DR001', 2)
+  <built-in method now of type object at 0x00007FFF5BA7FDA0>
